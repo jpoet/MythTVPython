@@ -262,7 +262,15 @@ def process_command_line():
 
     parser_add.add_argument('--title', type=str, required=False,
                             metavar='<title>',
-                            help='full program name, no wild cards/regex')
+                            help='full program name')
+
+    parser_add.add_argument('--subtitle', type=str, required=False,
+                            metavar='<subtitle>',
+                            help='program subtitle')
+
+    parser_add.add_argument('--description', type=str, required=False,
+                            metavar='<description>',
+                            help='program description')
 
     parser_add.add_argument('--chanid', type=str, required=False,
                             metavar="<chanid>",
@@ -288,6 +296,16 @@ def process_command_line():
     parser_add.add_argument('--duration', type=int, required=False,
                             metavar="<duration>", default = 60,
                             help='Manual record duration in minutes '
+                            '(%(default)s)')
+
+    parser_add.add_argument('--season', type=int, required=False,
+                            metavar="<season>", default = 0,
+                            help='Season number'
+                            '(%(default)s)')
+
+    parser_add.add_argument('--episode', type=int, required=False,
+                            metavar="<episode>", default = 0,
+                            help='Episode number '
                             '(%(default)s)')
 
     values = ', '.join(TYPES)
@@ -587,7 +605,8 @@ def get_program_data(backend, args, opts):
     '''
 
     endpoint = 'Guide/GetProgramList'
-    rest = 'Details=True&TitleFilter={}'.format(args['title'])
+    rest = 'Details=False&WithInvisible=True&TitleFilter={}'.format(
+        args['title'])
 
     try:
         resp_dict = backend.send(endpoint=endpoint, rest=rest, opts=opts)
@@ -768,10 +787,10 @@ def update_template(template, guide_data, args):
         template['ChanId']    = guide_data['Channel']['ChanId']
         template['SearchType'] = 'None'
         template['Category']  = guide_data['Category']
-        template['SeriesId']  = guide_data['SeriesId']
         template['FindTime']  = util.create_find_time(guide_data['StartTime'])
         template['Description'] = 'Rule created by add_recording_rule.py'
-    except KeyError:
+    except KeyError as e:
+        print('guide data missing "{}" element.').format(e)
         return False
 
     return True
@@ -840,6 +859,7 @@ def record_title(backend, args, opts):
     if update_template(template, guide_data, args):
         add_record_rule(backend, template, args, opts)
     else:
+        print('Guide data: {}'.format(guide_data))
         sys.exit('\nAbort, error while copying guide data to template.')
 
 
@@ -912,6 +932,14 @@ def record_manual_type(backend, args, opts, type, chaninfo,
 
     template['Type']       = record_type(type)
     template['Title']      = args['title']
+    if args['subtitle']:
+        template['SubTitle']   = args['subtitle']
+    if args['description']:
+        template['Description'] = args['description']
+    if args['season']:
+        template['Season'] = args['season']
+    if args['episode']:
+        template['Episode'] = args['episode']
     template['Station']    = chaninfo['CallSign']
     template['CallSign']   = chaninfo['CallSign']
 
