@@ -44,9 +44,12 @@ import socket
 import traceback
 
 try:
-    from mythtv_services_api import (send as api, utilities as util)
+    from MythTV.services_api import send as api
+    from MythTV.services_api import utilities as util
 except ImportError:
-    sys.exit('See: github.com/billmeek/MythTVServicesAPI/blob/master/dist\n')
+    print('See: https://github.com/billmeek/MythTVServicesAPI\n')
+    sys.exit(-1)
+
 
 WHITE = '\033[0m'
 YELLOW = '\033[93m'
