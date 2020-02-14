@@ -311,6 +311,10 @@ def process_command_line():
                             help='Episode number '
                             '(%(default)s)')
 
+    parser_add.add_argument('--inetref', type=str, required=False,
+                            metavar='<inetref>',
+                            help='Metadata ref, e.g. ttvdb.py_352773')
+
     values = ', '.join(TYPES)
     parser_add.add_argument('--type', type=str, required=True, choices=(TYPES),
                             metavar='<type>',
@@ -943,6 +947,8 @@ def record_manual_type(backend, args, opts, type, chaninfo,
         template['Season'] = args['season']
     if args['episode']:
         template['Episode'] = args['episode']
+    if args['inetref']:
+        template['Inetref'] = args['inetref']
     template['Station']    = chaninfo['CallSign']
     template['CallSign']   = chaninfo['CallSign']
 
