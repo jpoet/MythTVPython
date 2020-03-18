@@ -67,6 +67,7 @@ WIDTH['inactive'] = 5
 WIDTH['profile'] = 5
 WIDTH['recgroup'] = 5
 WIDTH['playgroup'] = 5
+WIDTH['lastrecgroup'] = 5
 WIDTH['expire'] = 5
 WIDTH['input'] = 5
 WIDTH['subtitle'] = 8
@@ -124,6 +125,19 @@ localtz = LocalTimezone()
 utcnow  = datetime.utcnow().replace(tzinfo=timezone.utc)
         
 def datefromisostr(datestr):
+#    regex = r'^(?P<year>[0-9]{4})(?P<hyphen>-?)(?P<month>1[0-2]|0[1-9])(?P=hyphen)(?<day>3[01]|0[1-9]|[12][0-9])$'
+    regex = r'^(?P<year>[0-9]{4})(?P<hyphen>-?)(?P<month>1[0-2]|0[1-9])(?P=hyphen)(?P<day>3[01]|0[1-9]|[12][0-9])$'
+    match_iso8601 = re.compile(regex)
+    m = match_iso8601.search(datestr)
+
+    dt = datetime(year  =  int(m.group('year')),
+                  month =  int(m.group('month')),
+                  day   =  int(m.group('day'))
+    )
+
+    return dt
+
+def datetimefromisostr(datestr):
     regex = r'^(?P<year>[0-9]{4})(?P<hyphen>-?)(?P<month>1[0-2]|0[1-9])(?P=hyphen)(?P<day>3[01]|0[1-9]|[12][0-9])T(?P<hour>2[0-3]|[01][0-9]):?(?P<minute>[0-5][0-9]):?(?P<second>[0-5][0-9])(?P<timezone>Z|[+-](?:2[0-3]|[01][0-9])(?::?(?:[0-5][0-9]))?)?$'
 
     match_iso8601 = re.compile(regex)
@@ -297,9 +311,14 @@ def process_command_line():
                             '(%(default)s))')
 
     parser_add.add_argument('--duration', type=int, required=False,
-                            metavar="<duration>", default = 60,
+                            metavar="<minutes>", default = 60,
                             help='Manual record duration in minutes '
-                            '(%(default)s)')
+                            '[added to dursecs] (%(default)s)')
+
+    parser_add.add_argument('--dursecs', type=int, required=False,
+                            metavar="<seconds>", default = 0,
+                            help='Manual record duration in seconds '
+                            '[added to duration] (%(default)s)')
 
     parser_add.add_argument('--season', type=int, required=False,
                             metavar="<season>", default = 0,
@@ -314,6 +333,14 @@ def process_command_line():
     parser_add.add_argument('--inetref', type=str, required=False,
                             metavar='<inetref>',
                             help='Metadata ref, e.g. ttvdb.py_352773')
+
+    parser_add.add_argument('--originalairdate', type=str, required=False,
+                            metavar='<date>',
+                            help='Date in YYYY-MM-DD format')
+
+    parser_add.add_argument('--input', type=int, required=False,
+                            metavar="<input id>",
+                            help='Mythtv cardid')
 
     values = ', '.join(TYPES)
     parser_add.add_argument('--type', type=str, required=True, choices=(TYPES),
@@ -492,6 +519,7 @@ def setup(backend, opts, args):
         vprint("\nIs mythbackend running?", args);
         sys.exit(-1)
 
+        
 def get_sources(backend, args):
     '''
     See: https://www.mythtv.org/wiki/Channel_Service#GetVideoSourceList
@@ -645,7 +673,7 @@ def get_program_data(backend, args, opts):
 
 
 def get_recording_ruleid(backend, args, chanid, starttime):
-    dt = datefromisostr(starttime)
+    dt = datetimefromisostr(starttime)
     # Convert to UTC
     start = dt.astimezone(tz=timezone.utc)
     startstr = "{}".format(start.isoformat().replace('+00:00', 'Z'))
@@ -727,6 +755,7 @@ def recording_rule_str(rule):
               'Profile:{profile:{profile_width}} '
               'RecGroup:{recgroup:{recgroup_width}} '
               'PlayGroup:{playgroup:{playgroup_width}} '
+              'LastRecorded:{lastrecgroup:{lastrecgroup_width}} '
               'Expire:{expire:{expire_width}}'
               .format(id = id,
                       id_width = WIDTH['id'],
@@ -752,6 +781,8 @@ def recording_rule_str(rule):
                       recgroup_width = WIDTH['recgroup'],
                       playgroup = rule['PlayGroup'],
                       playgroup_width = WIDTH['playgroup'],
+                      lastrecgroup = rule['LastRecorded'],
+                      lastrecgroup_width = WIDTH['lastrecgroup'],
                       expire = rule['AutoExpire'],
                       expire_width = WIDTH['expire']
               )
@@ -811,7 +842,7 @@ def add_record_rule(backend, template, args, opts):
     endpoint = 'Dvr/AddRecordSchedule'
 
     params_not_sent = ('AverageDelay', 'CallSign', 'Id', 'LastDeleted',
-                       'LastRecorded', 'NextRecording', 'ParentId')
+                       'NextRecording', 'ParentId')
 
     for param in params_not_sent:
         try:
@@ -918,7 +949,7 @@ def get_chanid(backend, sourceid, channum):
 
 
 def record_manual_type(backend, args, opts, type, chaninfo,
-                       template, starttime, duration):
+                       template, starttime, durmin, dursec):
     if not starttime:
         sys.exit('\nAbort, manul record: no starttime provided.')
 
@@ -926,7 +957,7 @@ def record_manual_type(backend, args, opts, type, chaninfo,
 
     # Convert to UTC
     start = starttime.replace(tzinfo=localtz).astimezone(tz=timezone.utc)
-    end   = starttime + timedelta(minutes = duration)
+    end   = starttime + timedelta(minutes = durmin, seconds = dursec)
     end   = end.replace(tzinfo=localtz).astimezone(tz=timezone.utc)
 
     template['StartTime']  = "{}".format(start.isoformat()
@@ -951,6 +982,11 @@ def record_manual_type(backend, args, opts, type, chaninfo,
         template['Inetref'] = args['inetref']
     template['Station']    = chaninfo['CallSign']
     template['CallSign']   = chaninfo['CallSign']
+    if args['input']:
+        template['PreferredInput'] = args['input']
+    if args['originalairdate']:
+        dt = datefromisostr(args['originalairdate'])
+        template['LastRecorded'] = "{}".format(dt.isoformat())
 
     print('{}'.format(recording_rule_str(template)))
 
@@ -1014,9 +1050,9 @@ def record_manual(backend, args, opts):
         if not args['starttime']:
             vprint('starttime required for this type.', args)
             return False
-        dt = datefromisostr(args['starttime'])
+        dt = datetimefromisostr(args['starttime'])
         record_manual_type(backend, args, opts, args['type'], chaninfo, template,
-                           dt, int(args['duration']))
+                           dt, int(args['duration']), int(args['dursecs']))
         
 
 def remove_record_rule(backend, args, opts, rule):
@@ -1200,7 +1236,7 @@ def print_program_details(backend, program, args):
     flags    = int(program['ProgramFlags'])
     chanid   = int(program['Channel']['ChanId'])
 
-    startts  = datefromisostr(program['Recording']['StartTs'])
+    startts  = datetimefromisostr(program['Recording']['StartTs'])
     startstr = startts.astimezone(localtz).isoformat()[:19]
 
     status   = int(program['Recording']['Status'])
@@ -1262,7 +1298,7 @@ def print_upcoming(backend, args):
         WIDTH['title'] = max(WIDTH['title'], len(program['Title'].strip()))
         WIDTH['subtitle'] = max(WIDTH['subtitle'],
                                 len(program['SubTitle'].strip()))
-        startts  = datefromisostr(program['Recording']['StartTs'])
+        startts  = datetimefromisostr(program['Recording']['StartTs'])
         startstr = startts.astimezone(localtz).isoformat()[:19]
         WIDTH['start'] = max(WIDTH['start'], len(startstr))
         WIDTH['end'] = max(WIDTH['end'], len(program['EndTime']))
@@ -1304,7 +1340,7 @@ def query_recordedid(backend, args, opts):
     endpoint = 'Dvr/RecordedIdForKey'
 
     Id = int
-    dt = datefromisostr(args['starttime'])
+    dt = datetimefromisostr(args['starttime'])
     # Convert to UTC
     start = dt.astimezone(tz=timezone.utc)
     startstr = "{}".format(start.isoformat().replace('+00:00', 'Z'))
