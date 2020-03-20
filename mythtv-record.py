@@ -1036,6 +1036,7 @@ def record_manual(backend, args, opts):
     template['SearchType'] = 'Manual Search'
     template['Category']   = ''
     template['SeriesId']   = ''
+    template['filter']     = 0
 
     chaninfo = get_channel(backend, chanid)
     if not chaninfo:
