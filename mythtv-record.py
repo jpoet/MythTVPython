@@ -754,10 +754,17 @@ def recording_rule_str(rule):
     else:
         id = -1
 
+    if 'Subtitle' in rule:
+        subt = rule['Subtitle']
+        subt_width = WIDTH['subtitle']
+    else:
+        subt = ''
+        subt_width = 0
+
     result = ('{id:{id_width}}: {chanid:{chanid_width}} '
               '{callsign:{callsign_width}} {rectype:{rectype_width}} '
               '{title:{title_width}} - ({firstaired:{date_width}}) '
-              '{subtitle:{subtitle_width}} - '
+              '{subtitle:>{subtitle_width}} - '
               '"{desc:{desc_width}}" Start:{start:{start_width}}  '
               'End:{end:{end_width}}  Priority:{priority:{priority_width}}  '
               'Inactive:{inactive:{inactive_width}}  '
@@ -778,8 +785,8 @@ def recording_rule_str(rule):
                       title_width = WIDTH['title'],
                       firstaired = rule['LastRecorded'],
                       date_width = WIDTH['date'],
-                      subtitle = rule['Subtitle'],
-                      subtitle_width = WIDTH['subtitle'],
+                      subtitle = subt,
+                      subtitle_width = subt_width,
                       desc = rule['Description'],
                       desc_width = WIDTH['desc'],
                       start = rule['StartTime'],
@@ -963,6 +970,42 @@ def get_chanid(backend, sourceid, channum):
     return None
 
 
+def metadata_from_ttvdb(ref, args, template):
+    try:
+        t = tvdb_api.Tvdb()
+    except:
+        print('tvdb_api not available. Title must be provided.')
+        sys.exit(-1)
+
+    try:
+        ep = t[ref]
+    except:
+        print('ttvdb: [{}] not found')
+        sys.exit(-1)
+
+    template['Title'] = ep['seriesname']
+
+    if args['season']:
+        ep = t[ref][args['season']][args['episode']]
+        template['Subtitle'] = ep['episodeName']
+
+    try:
+        dt = datefromisostr(ep['firstAired'])
+        template['LastRecorded'] = '{}'.format(dt.isoformat())
+    except:
+        ...
+
+    template['Description'] = ep['overview']
+    return template
+
+
+def metadata_from_tmdb3(ref, args, template):
+    print('Not yet')
+    sys.exit(-1)
+
+    return template
+
+
 def record_manual_type(backend, args, opts, type, chaninfo,
                        template, starttime, durmin, dursec):
     if not starttime:
@@ -989,26 +1032,12 @@ def record_manual_type(backend, args, opts, type, chaninfo,
     if args['title']:
         template['Title']      = args['title']
     elif args['inetref']:
-        try:
-            t = tvdb_api.Tvdb()
-        except:
-            print('tvdb_api not available. Title must be provided.')
-            sys.exit(-1)
-            
-        ep = t[args['inetref']]
-        template['Title'] = ep['seriesname']
-
-        if args['season']:
-            ep = t[args['inetref']][args['season']][args['episode']]
-            template['Subtitle'] = ep['episodeName']
-
-        try:
-            dt = datefromisostr(ep['firstAired'])
-            template['LastRecorded'] = '{}'.format(dt.isoformat())
-        except:
-            ...
-
-        template['Description'] = ep['overview']
+        if args['inetref'][:9] == 'ttvdb.py_':
+            template = metadata_from_ttvdb(args['inetref'][9:], args, template)
+        elif args['inetref'][:9] == 'tmdb3.py_':
+            template = metadata_from_tmdb3(args['inetref'][9:], args, template)
+        else:
+            template = metadata_from_ttvdb(args['inetref'], args, template)
 
     if args['subtitle']:
         template['SubTitle']   = args['subtitle']
