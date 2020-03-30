@@ -51,6 +51,11 @@ except ImportError:
     sys.exit(-1)
 
 
+try:
+    import tvdb_api
+except ImportError:
+    print('tvdb_api not found. Auto meta-data will not work.')
+
 WHITE = '\033[0m'
 YELLOW = '\033[93m'
 
@@ -60,6 +65,8 @@ WIDTH['chanid'] = 6
 WIDTH['callsign'] = 5
 WIDTH['rectype'] = 5
 WIDTH['title'] = 5
+WIDTH['subtitle'] = 8
+WIDTH['desc'] = 5
 WIDTH['start'] = 5
 WIDTH['end'] = 5
 WIDTH['priority'] = 5
@@ -70,8 +77,8 @@ WIDTH['playgroup'] = 5
 WIDTH['lastrecgroup'] = 5
 WIDTH['expire'] = 5
 WIDTH['input'] = 5
-WIDTH['subtitle'] = 8
 WIDTH['status'] = 6
+WIDTH['date'] = 4
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -749,7 +756,9 @@ def recording_rule_str(rule):
 
     result = ('{id:{id_width}}: {chanid:{chanid_width}} '
               '{callsign:{callsign_width}} {rectype:{rectype_width}} '
-              '{title:{title_width}} Start:{start:{start_width}}  '
+              '{title:{title_width}} - ({firstaired:{date_width}}) '
+              '{subtitle:{subtitle_width}} - '
+              '"{desc:{desc_width}}" Start:{start:{start_width}}  '
               'End:{end:{end_width}}  Priority:{priority:{priority_width}}  '
               'Inactive:{inactive:{inactive_width}}  '
               'Profile:{profile:{profile_width}} '
@@ -767,6 +776,12 @@ def recording_rule_str(rule):
                       rectype_width = WIDTH['rectype'],
                       title = rule['Title'],
                       title_width = WIDTH['title'],
+                      firstaired = rule['LastRecorded'],
+                      date_width = WIDTH['date'],
+                      subtitle = rule['Subtitle'],
+                      subtitle_width = WIDTH['subtitle'],
+                      desc = rule['Description'],
+                      desc_width = WIDTH['desc'],
                       start = rule['StartTime'],
                       start_width = WIDTH['start'],
                       end = rule['EndTime'],
@@ -969,11 +984,37 @@ def record_manual_type(backend, args, opts, type, chaninfo,
     template['FindTime']   = starttime.strftime('%H:%M:%S')
 
     template['Type']       = record_type(type)
-    template['Title']      = args['title']
+
+
+    if args['title']:
+        template['Title']      = args['title']
+    elif args['inetref']:
+        try:
+            t = tvdb_api.Tvdb()
+        except:
+            print('tvdb_api not available. Title must be provided.')
+            sys.exit(-1)
+            
+        ep = t[args['inetref']]
+        template['Title'] = ep['seriesname']
+
+        if args['season']:
+            ep = t[args['inetref']][args['season']][args['episode']]
+            template['Subtitle'] = ep['episodeName']
+
+        try:
+            dt = datefromisostr(ep['firstAired'])
+            template['LastRecorded'] = '{}'.format(dt.isoformat())
+        except:
+            ...
+
+        template['Description'] = ep['overview']
+
     if args['subtitle']:
         template['SubTitle']   = args['subtitle']
     if args['description']:
         template['Description'] = args['description']
+
     if args['season']:
         template['Season'] = args['season']
     if args['episode']:
@@ -1521,7 +1562,7 @@ def main():
     setup(backend, opts, args)
 
     if args['group'] == 'add':
-        if not args['title']:
+        if not args['title'] and not args['inetref']:
             sys.exit('\nTitle for new rule is required.\n')
 
         if (int(args['manual']) > 0):
