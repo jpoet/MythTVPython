@@ -43,6 +43,7 @@ import re
 import socket
 import traceback
 
+
 try:
     from MythTV.services_api import send as api
     from MythTV.services_api import utilities as util
@@ -50,11 +51,6 @@ except ImportError:
     print('See: https://github.com/billmeek/MythTVServicesAPI\n')
     sys.exit(-1)
 
-
-try:
-    import tvdb_api
-except ImportError:
-    print('tvdb_api not found. Auto meta-data will not work.')
 
 WHITE = '\033[0m'
 YELLOW = '\033[93m'
@@ -972,6 +968,12 @@ def get_chanid(backend, sourceid, channum):
 
 def metadata_from_ttvdb(ref, args, template):
     try:
+        import tvdb_api
+    except ImportError:
+        print('tvdb_api not found. Auto tv meta-data will not work.')
+        return False, template
+
+    try:
         t = tvdb_api.Tvdb()
     except:
         print('tvdb_api not available. Title must be provided.')
@@ -980,7 +982,7 @@ def metadata_from_ttvdb(ref, args, template):
     try:
         ep = t[ref]
     except:
-        print('ttvdb: [{}] not found')
+        print('ttvdb: [{}] not found'.format(ref))
         sys.exit(-1)
 
     template['Title'] = ep['seriesname']
@@ -993,17 +995,44 @@ def metadata_from_ttvdb(ref, args, template):
         dt = datefromisostr(ep['firstAired'])
         template['LastRecorded'] = '{}'.format(dt.isoformat())
     except:
-        ...
+        print('Invalid original date')
+        return False, template
 
+    template['Inetref'] = 'ttvdb.py_{}'.format(ref)
     template['Description'] = ep['overview']
-    return template
+    return True, template
 
 
 def metadata_from_tmdb3(ref, args, template):
-    print('Not yet')
-    sys.exit(-1)
+    try:
+        from MythTV.tmdb3.tmdb_exceptions import TMDBRequestInvalid
+        from MythTV.tmdb3 import Movie
+        from MythTV.tmdb3 import set_key, set_cache, set_locale
+    except ImportError:
+        print('MythTV.tmdb3 not found. Auto movie meta-data will not work.')
+        return False, template
 
-    return template
+    set_key('c27cb71cff5bd76e1a7a009380562c62')
+
+    try:
+        movie = Movie(ref)
+    except:
+        print('tmdb3: [{}] not found'.format(ref))
+        sys.exit(-1)
+
+    template['Title'] = movie.title
+    try:
+        dt = datefromisostr(str(movie.releasedate))
+        template['LastRecorded'] = '{}'.format(dt.isoformat())
+    except:
+        print(traceback.format_exc())
+        print('Invalid release date')
+        return False, template
+
+    template['Description'] = movie.overview
+    template['Inetref'] = 'tmdb3.py_{}'.format(ref)
+
+    return True, template
 
 
 def record_manual_type(backend, args, opts, type, chaninfo,
@@ -1028,16 +1057,18 @@ def record_manual_type(backend, args, opts, type, chaninfo,
 
     template['Type']       = record_type(type)
 
-
     if args['title']:
         template['Title']      = args['title']
     elif args['inetref']:
         if args['inetref'][:9] == 'ttvdb.py_':
-            template = metadata_from_ttvdb(args['inetref'][9:], args, template)
+            res, template = metadata_from_ttvdb(args['inetref'][9:], args, template)
         elif args['inetref'][:9] == 'tmdb3.py_':
-            template = metadata_from_tmdb3(args['inetref'][9:], args, template)
+            res, template = metadata_from_tmdb3(args['inetref'][9:], args, template)
         else:
-            template = metadata_from_ttvdb(args['inetref'], args, template)
+            res, template = metadata_from_ttvdb(args['inetref'], args, template)
+
+    if not res:
+        return False
 
     if args['subtitle']:
         template['SubTitle']   = args['subtitle']
@@ -1048,10 +1079,9 @@ def record_manual_type(backend, args, opts, type, chaninfo,
         template['Season'] = args['season']
     if args['episode']:
         template['Episode'] = args['episode']
-    if args['inetref']:
-        template['Inetref'] = args['inetref']
-    template['Station']    = chaninfo['CallSign']
-    template['CallSign']   = chaninfo['CallSign']
+
+    template['Station']  = chaninfo['CallSign']
+    template['CallSign'] = chaninfo['CallSign']
     if args['input']:
         template['PreferredInput'] = args['input']
     if args['originalairdate']:
