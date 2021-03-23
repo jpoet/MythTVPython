@@ -36,6 +36,7 @@ from datetime import tzinfo, timedelta, datetime, timezone
 import argparse
 from argparse import RawDescriptionHelpFormatter
 import json
+import html
 import logging
 import os
 import sys
@@ -966,74 +967,6 @@ def get_chanid(backend, sourceid, channum):
     return None
 
 
-def metadata_from_ttvdb(ref, args, template):
-    try:
-        import tvdb_api
-    except ImportError:
-        print('tvdb_api not found. Auto tv meta-data will not work.')
-        return False, template
-
-    try:
-        t = tvdb_api.Tvdb()
-    except:
-        print('tvdb_api not available. Title must be provided.')
-        sys.exit(-1)
-
-    try:
-        ep = t[ref]
-    except:
-        print('ttvdb: [{}] not found'.format(ref))
-        sys.exit(-1)
-
-    template['Title'] = ep['seriesname']
-
-    if args['season']:
-        ep = t[ref][args['season']][args['episode']]
-        template['Subtitle'] = ep['episodeName']
-
-    try:
-        dt = datefromisostr(ep['firstAired'])
-        template['LastRecorded'] = '{}'.format(dt.isoformat())
-    except:
-        print('Invalid original date')
-        return False, template
-
-    template['Inetref'] = 'ttvdb.py_{}'.format(ref)
-    template['Description'] = ep['overview']
-    return True, template
-
-
-def metadata_from_tmdb3(ref, args, template):
-    try:
-        from MythTV.tmdb3.tmdb_exceptions import TMDBRequestInvalid
-        from MythTV.tmdb3 import Movie
-        from MythTV.tmdb3 import set_key, set_cache, set_locale
-    except ImportError:
-        print('MythTV.tmdb3 not found. Auto movie meta-data will not work.')
-        return False, template
-
-    set_key('c27cb71cff5bd76e1a7a009380562c62')
-
-    try:
-        movie = Movie(ref)
-    except:
-        print('tmdb3: [{}] not found'.format(ref))
-        sys.exit(-1)
-
-    template['Title'] = movie.title
-    try:
-        dt = datefromisostr(str(movie.releasedate))
-        template['LastRecorded'] = '{}'.format(dt.isoformat())
-    except:
-        print(traceback.format_exc())
-        print('Invalid release date')
-        return False, template
-
-    template['Description'] = movie.overview
-    template['Inetref'] = 'tmdb3.py_{}'.format(ref)
-
-    return True, template
-
 
 def record_manual_type(backend, args, opts, type, chaninfo,
                        template, starttime, durmin, dursec):
@@ -1047,28 +980,41 @@ def record_manual_type(backend, args, opts, type, chaninfo,
     end   = starttime + timedelta(minutes = durmin, seconds = dursec)
     end   = end.replace(tzinfo=localtz).astimezone(tz=timezone.utc)
 
+    if args['inetref']:
+        template['Inetref'] = args['inetref']
+        from mythtvutil.mythmetadata import retrieve_meta
+
+        meta = {}
+        if args['season'] and args['episode']:
+            meta = retrieve_meta(args['inetref'], season=args['season'],
+                                 episode=args['episode'])
+        elif args['season']:
+            meta = retrieve_meta(args['inetref'], args['season'])
+        else:
+            meta =  retrieve_meta(args['inetref'])
+
+        if meta:
+            # Python >= 3.9
+            #  template = template | meta
+            # Python < 3.9
+            template = {**template, **meta}
+        else:
+            print('Metadata not found!')
+            return False
+
     template['StartTime']  = "{}".format(start.isoformat()
                                          .replace('+00:00', 'Z'))
     template['EndTime']    = "{}".format(end.isoformat()
                                          .replace('+00:00', 'Z'))
-    template['Description'] = ('{} (Manual Record)'
-                              .format(starttime.strftime('%H')))
+    if 'Description' not in template:
+        template['Description'] = ('{} (Manual Record)'
+                                   .format(starttime.strftime('%H')))
     template['FindTime']   = starttime.strftime('%H:%M:%S')
 
     template['Type']       = record_type(type)
 
     if args['title']:
         template['Title']      = args['title']
-    elif args['inetref']:
-        if args['inetref'][:9] == 'ttvdb.py_':
-            res, template = metadata_from_ttvdb(args['inetref'][9:], args, template)
-        elif args['inetref'][:9] == 'tmdb3.py_':
-            res, template = metadata_from_tmdb3(args['inetref'][9:], args, template)
-        else:
-            res, template = metadata_from_ttvdb(args['inetref'], args, template)
-
-    if not res:
-        return False
 
     if args['subtitle']:
         template['SubTitle']   = args['subtitle']
