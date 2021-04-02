@@ -57,6 +57,7 @@ WHITE = '\033[0m'
 YELLOW = '\033[93m'
 
 WIDTH = {}
+WIDTH['inetref'] = 16
 WIDTH['id'] = 2
 WIDTH['chanid'] = 6
 WIDTH['callsign'] = 5
@@ -590,7 +591,8 @@ def get_templates(backend, args):
 
 
 def recording_template_str(rule):
-    result = ('{id:{id_width}}: '
+    result = ('{inetref:{inetref_width}}: '
+              '{id:{id_width}}: '
               '{rectype:{rectype_width}} '
               '{title:{title_width}} '
               'Priority:{priority:{priority_width}}  '
@@ -598,7 +600,9 @@ def recording_template_str(rule):
               'RecGroup:{recgroup:{recgroup_width}} '
               'PlayGroup:{playgroup:{playgroup_width}} '
               'Expire:{expire:{expire_width}}'
-              .format(id = rule['Id'],
+              .format(inetref = rule['Inetref'],
+                      inetref_width = WIDTH['inetref'],
+                      id = rule['Id'],
                       id_width = WIDTH['id'],
                       rectype = rule['Type'],
                       rectype_width = WIDTH['rectype'],
@@ -758,7 +762,7 @@ def recording_rule_str(rule):
         subt = ''
         subt_width = 0
 
-    result = ('{id:{id_width}}: {chanid:{chanid_width}} '
+    result = ('{inetref:{inetref_width}} {id:{id_width}}: {chanid:{chanid_width}} '
               '{callsign:{callsign_width}} {rectype:{rectype_width}} '
               '{title:{title_width}} - ({firstaired:{date_width}}) '
               '{subtitle:>{subtitle_width}} - '
@@ -770,7 +774,9 @@ def recording_rule_str(rule):
               'PlayGroup:{playgroup:{playgroup_width}} '
               'LastRecorded:{lastrecgroup:{lastrecgroup_width}} '
               'Expire:{expire:{expire_width}}'
-              .format(id = id,
+              .format(inetref = rule['Inetref'],
+                      inetref_width = WIDTH['inetref'],
+                      id = id,
                       id_width = WIDTH['id'],
                       chanid = rule['ChanId'],
                       chanid_width = WIDTH['chanid'],
@@ -1017,7 +1023,7 @@ def record_manual_type(backend, args, opts, type, chaninfo,
         template['Title']      = args['title']
 
     if args['subtitle']:
-        template['SubTitle']   = args['subtitle']
+        template['Subtitle']   = args['subtitle']
     if args['description']:
         template['Description'] = args['description']
 
@@ -1025,6 +1031,9 @@ def record_manual_type(backend, args, opts, type, chaninfo,
         template['Season'] = args['season']
     if args['episode']:
         template['Episode'] = args['episode']
+
+    if template['Subtitle'][:8] == 'Episode ':
+        template['Subtitle'] = f"s{template['Season']:0{2}}e{template['Episode']:0{2}}"
 
     template['Station']  = chaninfo['CallSign']
     template['CallSign'] = chaninfo['CallSign']
@@ -1035,6 +1044,8 @@ def record_manual_type(backend, args, opts, type, chaninfo,
         template['LastRecorded'] = "{}".format(dt.isoformat())
 
     print('{}'.format(recording_rule_str(template)))
+
+
 
     return add_record_rule(backend, template, args, opts)
     
@@ -1307,12 +1318,13 @@ def print_program_details(backend, program, args):
         and (args['chanid'] is None or args['chanid'] == chanid)):
 
         matched += 1
-        print('{id:{id_width}} '
+        print('{inetref:{inetref_width}} {id:{id_width}} '
               '{inp:{inp_width}} '
               '{chanid:^{chanid_width}} '
               '{start:{start_width}}  {title:{title_width}} '
               '{sub:{sub_width}}  {status:{status_width}} {flags}'
-              .format(id = recid, id_width = WIDTH['id'],
+              .format(inetref = inetref, inetref_width = WIDTH['inetref'],
+                      id = recid, id_width = WIDTH['id'],
                       inp = inputname, inp_width = WIDTH['input'],
                       chanid = chanid, chanid_width = WIDTH['chanid'],
                       start = startstr, start_width = WIDTH['start'],
