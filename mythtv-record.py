@@ -326,12 +326,12 @@ def process_command_line():
                             '[added to duration] (%(default)s)')
 
     parser_add.add_argument('--season', type=int, required=False,
-                            metavar="<season>", default = 0,
+                            metavar="<season>", default = -1,
                             help='Season number'
                             '(%(default)s)')
 
     parser_add.add_argument('--episode', type=int, required=False,
-                            metavar="<episode>", default = 0,
+                            metavar="<episode>", default = -1,
                             help='Episode number '
                             '(%(default)s)')
 
@@ -991,10 +991,10 @@ def record_manual_type(backend, args, opts, type, chaninfo,
         from mythtvutil.mythmetadata import retrieve_meta
 
         meta = {}
-        if args['season'] and args['episode']:
+        if 'season' in args and 'episode' in args:
             meta = retrieve_meta(args['inetref'], season=args['season'],
                                  episode=args['episode'])
-        elif args['season']:
+        elif 'season' in args:
             meta = retrieve_meta(args['inetref'], args['season'])
         else:
             meta =  retrieve_meta(args['inetref'])
@@ -1032,7 +1032,7 @@ def record_manual_type(backend, args, opts, type, chaninfo,
     if args['episode']:
         template['Episode'] = args['episode']
 
-    if template['Subtitle'][:8] == 'Episode ':
+    if 'Subtitle' in template and template['Subtitle'][:8] == 'Episode ':
         template['Subtitle'] = f"s{template['Season']:0{2}}e{template['Episode']:0{2}}"
 
     template['Station']  = chaninfo['CallSign']
