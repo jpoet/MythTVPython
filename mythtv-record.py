@@ -1288,6 +1288,7 @@ def print_program_details(backend, program, args):
 
     matched = 0
 
+    inetref  = program['Inetref']
     inputname= program['Recording']['EncoderName']
     title    = program['Title']
     subtitle = program['SubTitle']
